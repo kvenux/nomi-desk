@@ -73,6 +73,78 @@ function Normalize-NomiSession {
   return Limit-NomiUtf8Bytes -Text (($Text -replace "\s+", " ").Trim()) -MaxBytes 64
 }
 
+function Normalize-NomiField {
+  param(
+    [string]$Text,
+    [int]$MaxBytes
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Text)) {
+    return $null
+  }
+
+  return Limit-NomiUtf8Bytes -Text (($Text -replace "\s+", " ").Trim()) -MaxBytes $MaxBytes
+}
+
+function ConvertTo-NomiNumber {
+  param($Value)
+
+  if ($null -eq $Value) {
+    return $null
+  }
+
+  try {
+    return [double]$Value
+  } catch {
+    return $null
+  }
+}
+
+function Clamp-NomiPercent {
+  param($Value)
+
+  $number = ConvertTo-NomiNumber $Value
+  if ($null -eq $number) {
+    return $null
+  }
+
+  $pct = [int][Math]::Round($number)
+  if ($pct -lt 0) {
+    return 0
+  }
+  if ($pct -gt 100) {
+    return 100
+  }
+  return $pct
+}
+
+function Get-NomiDisplayTokenCount {
+  param($Usage)
+
+  if ($null -eq $Usage) {
+    return $null
+  }
+
+  $inputTokens = ConvertTo-NomiNumber $Usage.input_tokens
+  if ($null -ne $inputTokens) {
+    $cachedInputTokens = ConvertTo-NomiNumber $Usage.cached_input_tokens
+    $outputTokens = ConvertTo-NomiNumber $Usage.output_tokens
+    if ($null -eq $cachedInputTokens) {
+      $cachedInputTokens = 0
+    }
+    if ($null -eq $outputTokens) {
+      $outputTokens = 0
+    }
+
+    $displayTokens = $inputTokens - $cachedInputTokens + $outputTokens
+    if ($displayTokens -gt 0) {
+      return $displayTokens
+    }
+  }
+
+  return ConvertTo-NomiNumber $Usage.total_tokens
+}
+
 function Find-NomiPromptValue {
   param($Value)
 
@@ -168,6 +240,152 @@ function Write-NomiHookLog {
   }
 }
 
+function Get-CodexHome {
+  if (-not [string]::IsNullOrWhiteSpace($env:CODEX_HOME)) {
+    return $env:CODEX_HOME
+  }
+
+  return (Join-Path $HOME ".codex")
+}
+
+function Get-CodexConfigValue {
+  param(
+    [string]$CodexHome,
+    [string]$Name
+  )
+
+  if ([string]::IsNullOrWhiteSpace($CodexHome)) {
+    return $null
+  }
+
+  $configPath = Join-Path $CodexHome "config.toml"
+  if (-not (Test-Path -LiteralPath $configPath)) {
+    return $null
+  }
+
+  $pattern = '^\s*' + [regex]::Escape($Name) + '\s*=\s*"([^"]*)"'
+  $match = Select-String -LiteralPath $configPath -Pattern $pattern | Select-Object -First 1
+  if ($match) {
+    return $match.Matches[0].Groups[1].Value
+  }
+  return $null
+}
+
+function Read-NomiTokenSnapshotFromFile {
+  param([string]$Path)
+
+  if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path -LiteralPath $Path)) {
+    return $null
+  }
+
+  $lastTokenCount = $null
+  $stream = $null
+  $reader = $null
+  try {
+    $share = [System.IO.FileShare]([System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete)
+    $stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, $share)
+    $reader = [System.IO.StreamReader]::new($stream, [System.Text.Encoding]::UTF8, $true)
+    while (($line = $reader.ReadLine()) -ne $null) {
+      if ([string]::IsNullOrWhiteSpace($line)) {
+        continue
+      }
+
+      try {
+        $row = $line | ConvertFrom-Json -ErrorAction Stop
+      } catch {
+        continue
+      }
+
+      if ($row.type -eq "event_msg" -and $row.payload.type -eq "token_count") {
+        $lastTokenCount = $row.payload
+      }
+    }
+  } catch {
+    return $null
+  } finally {
+    if ($null -ne $reader) {
+      $reader.Dispose()
+    } elseif ($null -ne $stream) {
+      $stream.Dispose()
+    }
+  }
+
+  if ($null -eq $lastTokenCount) {
+    return $null
+  }
+
+  $info = $lastTokenCount.info
+  $windowUsage = $null
+  if ($info.last_token_usage) {
+    $windowUsage = $info.last_token_usage
+  } elseif ($info.total_token_usage) {
+    $windowUsage = $info.total_token_usage
+  }
+
+  $displayUsage = $windowUsage
+  if ($info.total_token_usage) {
+    $displayUsage = $info.total_token_usage
+  }
+
+  $snapshot = [ordered]@{}
+  $displayTokens = Get-NomiDisplayTokenCount $displayUsage
+  if ($null -ne $displayTokens -and $displayTokens -gt 0) {
+    $snapshot.used_tokens_k = [int][Math]::Round($displayTokens / 1000)
+  }
+
+  $windowTokens = ConvertTo-NomiNumber $windowUsage.total_tokens
+  $contextWindow = ConvertTo-NomiNumber $info.model_context_window
+  if ($null -ne $windowTokens -and $windowTokens -gt 0) {
+    if ($null -ne $contextWindow -and $contextWindow -gt 0) {
+      $snapshot.context_pct = Clamp-NomiPercent ($windowTokens * 100 / $contextWindow)
+    }
+  }
+
+  $quota = [ordered]@{}
+  $primaryUsed = ConvertTo-NomiNumber $lastTokenCount.rate_limits.primary.used_percent
+  if ($null -ne $primaryUsed) {
+    $quota.five_hour_left = Clamp-NomiPercent (100 - [int]$primaryUsed)
+  }
+  $secondaryUsed = ConvertTo-NomiNumber $lastTokenCount.rate_limits.secondary.used_percent
+  if ($null -ne $secondaryUsed) {
+    $quota.weekly_left = Clamp-NomiPercent (100 - [int]$secondaryUsed)
+  }
+  if ($quota.Count -gt 0) {
+    $snapshot.quota = $quota
+  }
+
+  if ($snapshot.Count -eq 0) {
+    return $null
+  }
+  return $snapshot
+}
+
+function Get-NomiTokenSnapshot {
+  param([string]$CodexHome)
+
+  if ([string]::IsNullOrWhiteSpace($CodexHome)) {
+    return $null
+  }
+
+  $sessionsDir = Join-Path $CodexHome "sessions"
+  if (-not (Test-Path -LiteralPath $sessionsDir)) {
+    return $null
+  }
+
+  $files = Get-ChildItem -LiteralPath $sessionsDir -Recurse -Filter "*.jsonl" -File |
+    Sort-Object LastWriteTimeUtc -Descending |
+    Select-Object -First 10
+
+  foreach ($file in $files) {
+    $snapshot = Read-NomiTokenSnapshotFromFile -Path $file.FullName
+    if ($null -ne $snapshot) {
+      return $snapshot
+    }
+  }
+
+  return $null
+}
+
 function Resolve-NomiSender {
   param([string]$RepoRoot)
 
@@ -204,6 +422,11 @@ try {
   $stdinText = [Console]::In.ReadToEnd()
   $cwd = (Get-Location).Path
   $prompt = Get-NomiPrompt -Name $EventName -RawInput $stdinText
+  $codexHome = Get-CodexHome
+  $model = Normalize-NomiField -Text (Get-CodexConfigValue -CodexHome $codexHome -Name "model") -MaxBytes 32
+  $effort = Normalize-NomiField -Text (Get-CodexConfigValue -CodexHome $codexHome -Name "model_reasoning_effort") -MaxBytes 16
+  $tier = Normalize-NomiField -Text (Get-CodexConfigValue -CodexHome $codexHome -Name "service_tier") -MaxBytes 16
+  $tokenSnapshot = Get-NomiTokenSnapshot -CodexHome $codexHome
   $payload = [ordered]@{
     protocol = "nomi-agent-display"
     version = 1
@@ -214,8 +437,22 @@ try {
     session = Normalize-NomiSession (Split-Path -Leaf $cwd)
   }
 
+  if (-not [string]::IsNullOrWhiteSpace($model)) {
+    $payload["model"] = $model
+  }
+  if (-not [string]::IsNullOrWhiteSpace($effort)) {
+    $payload["effort"] = $effort
+  }
+  if (-not [string]::IsNullOrWhiteSpace($tier)) {
+    $payload["tier"] = $tier
+  }
   if (-not [string]::IsNullOrWhiteSpace($prompt)) {
-    $payload.prompt = $prompt
+    $payload["prompt"] = $prompt
+  }
+  if ($null -ne $tokenSnapshot) {
+    foreach ($entry in $tokenSnapshot.GetEnumerator()) {
+      $payload[$entry.Key] = $entry.Value
+    }
   }
 
   $nomiTemp = Join-Path $env:TEMP "nomi"

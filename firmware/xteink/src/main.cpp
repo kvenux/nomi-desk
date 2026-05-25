@@ -48,6 +48,7 @@ static CodexBleBridge bridge;
 static char feedback[24] = "READY";
 static unsigned long feedbackUntil = 0;
 static uint32_t paintCount = 0;
+static bool firstPaint = true;
 static char serialLine[640];
 static uint16_t serialLineLen = 0;
 
@@ -69,7 +70,7 @@ static const char* pageTitle() {
     case Page::Themes:
       return "Themes";
     default:
-      return "Codex";
+      return "Nomi";
   }
 }
 
@@ -224,7 +225,7 @@ static void background() {
 
 static void header() {
   renderer.fillRoundedRect(28, 28, 424, 86, 10, Color::Black);
-  text(UI_12_FONT_ID, 48, 56, "CODEX", false, EpdFontFamily::BOLD);
+  text(UI_12_FONT_ID, 48, 56, "NOMI", false, EpdFontFamily::BOLD);
   text(NOTOSANS_18_FONT_ID, 48, 91, "XTEINK", false, EpdFontFamily::BOLD);
   text(UI_10_FONT_ID, 304, 56, pageTitle(), false, EpdFontFamily::BOLD);
   text(UI_10_FONT_ID, 304, 82, themeTitle(), false, EpdFontFamily::BOLD);
@@ -245,7 +246,7 @@ static void overviewPage() {
   renderer.drawRoundedRect(18, 18, 444, 764, 2, 8, true);
   renderer.drawRoundedRect(25, 25, 430, 750, 1, 5, true);
 
-  text(NOTOSANS_18_FONT_ID, 58, 58, "Codex Status", true, EpdFontFamily::BOLD);
+  text(NOTOSANS_18_FONT_ID, 58, 58, "Nomi Status", true, EpdFontFamily::BOLD);
   smallCubeIcon(394, 62);
   clippedText(UI_12_FONT_ID, 60, 112, 318, status.modelLine, true, EpdFontFamily::BOLD);
   char meta[128];
@@ -266,7 +267,7 @@ static void overviewPage() {
   divider(430);
 
   clockIcon(58, 454);
-  text(NOTOSANS_14_FONT_ID, 104, 454, "Quota usage", true, EpdFontFamily::BOLD);
+  text(NOTOSANS_14_FONT_ID, 104, 454, "Quota remaining", true, EpdFontFamily::BOLD);
   text(NOTOSANS_12_FONT_ID, 58, 502, "5h", true, EpdFontFamily::BOLD);
   char pct[8];
   snprintf(pct, sizeof(pct), "%u%%", status.fiveHourPct);
@@ -323,7 +324,7 @@ static void themesPage() {
   text(UI_12_FONT_ID, 82, 616, "Use UP and DOWN to change the visual skin.", true);
 }
 
-static void draw() {
+static void draw(HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH) {
   holdPower();
   ++paintCount;
   if (page == Page::Overview) {
@@ -346,7 +347,9 @@ static void draw() {
     }
     footer();
   }
-  renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+  const HalDisplay::RefreshMode actualRefreshMode = firstPaint ? HalDisplay::FULL_REFRESH : refreshMode;
+  renderer.displayBuffer(actualRefreshMode);
+  firstPaint = false;
 }
 
 static void handleButtons() {
@@ -354,41 +357,35 @@ static void handleButtons() {
   if (input.wasPressed(InputManager::BTN_RIGHT)) {
     page = static_cast<Page>((static_cast<uint8_t>(page) + 1) % static_cast<uint8_t>(Page::Count));
     setFeedback("NEXT");
-    bridge.notifyButton("right", static_cast<uint8_t>(page), static_cast<uint8_t>(theme));
     changed = true;
   }
   if (input.wasPressed(InputManager::BTN_LEFT)) {
     page = static_cast<Page>((static_cast<uint8_t>(page) + static_cast<uint8_t>(Page::Count) - 1) %
                              static_cast<uint8_t>(Page::Count));
     setFeedback("PREV");
-    bridge.notifyButton("left", static_cast<uint8_t>(page), static_cast<uint8_t>(theme));
     changed = true;
   }
   if (input.wasPressed(InputManager::BTN_UP)) {
     theme = static_cast<Theme>((static_cast<uint8_t>(theme) + 1) % static_cast<uint8_t>(Theme::Count));
     setFeedback("THEME");
-    bridge.notifyButton("up", static_cast<uint8_t>(page), static_cast<uint8_t>(theme));
     changed = true;
   }
   if (input.wasPressed(InputManager::BTN_DOWN)) {
     theme = static_cast<Theme>((static_cast<uint8_t>(theme) + static_cast<uint8_t>(Theme::Count) - 1) %
                                static_cast<uint8_t>(Theme::Count));
     setFeedback("THEME");
-    bridge.notifyButton("down", static_cast<uint8_t>(page), static_cast<uint8_t>(theme));
     changed = true;
   }
   if (input.wasPressed(InputManager::BTN_CONFIRM)) {
     setFeedback("REFRESH");
-    bridge.notifyButton("confirm", static_cast<uint8_t>(page), static_cast<uint8_t>(theme));
     changed = true;
   }
   if (input.wasPressed(InputManager::BTN_BACK)) {
     page = Page::Overview;
     setFeedback("HOME");
-    bridge.notifyButton("back", static_cast<uint8_t>(page), static_cast<uint8_t>(theme));
     changed = true;
   }
-  if (changed) draw();
+  if (changed) draw(HalDisplay::FAST_REFRESH);
 }
 
 static void sendScreenshot() {
@@ -415,7 +412,7 @@ static void handleSerial() {
         if (status.applyJson(serialLine, result, sizeof(result))) {
           Serial.printf("STATUS_OK rev=%" PRIu32 "\n", status.revision);
           setFeedback("USB");
-          draw();
+          draw(HalDisplay::FAST_REFRESH);
         } else {
           Serial.printf("STATUS_ERR %s\n", result);
         }
@@ -433,7 +430,7 @@ void setup() {
   holdPower();
   delay(300);
   Serial.begin(115200);
-  Serial.println("CODEX XTEINK GFX PORTRAIT BOOT");
+  Serial.println("NOMI XTEINK GFX PORTRAIT BOOT");
   status.setDefaults();
   input.begin();
   display.begin(false);
@@ -451,7 +448,7 @@ void loop() {
   handleSerial();
   if (bridge.poll()) {
     setFeedback("BLE");
-    draw();
+    draw(HalDisplay::FAST_REFRESH);
   }
   handleButtons();
   delay(20);

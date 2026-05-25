@@ -40,6 +40,10 @@ pub struct NomiPayload {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub effort: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tier: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub session: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt: Option<String>,
@@ -105,6 +109,8 @@ mod tests {
             time: "14:25".to_string(),
             event: "UserPromptSubmit".to_string(),
             model: None,
+            effort: None,
+            tier: None,
             session: None,
             prompt: None,
             context_pct: None,
@@ -115,6 +121,43 @@ mod tests {
         let json = String::from_utf8(encode_payload(&payload).unwrap()).unwrap();
         assert!(json.contains("\"protocol\":\"nomi-agent-display\""));
         assert!(json.contains("\"state\":\"active\""));
+    }
+
+    #[test]
+    fn preserves_model_effort_tier_and_window_snapshot() {
+        let raw = r#"{
+            "protocol":"nomi-agent-display",
+            "version":1,
+            "source":"codex",
+            "state":"active",
+            "time":"14:25",
+            "event":"UserPromptSubmit",
+            "model":"gpt-5.5",
+            "effort":"medium",
+            "tier":"default",
+            "context_pct":83,
+            "used_tokens_k":215,
+            "quota":{"five_hour_left":82,"weekly_left":78}
+        }"#;
+
+        let payload: NomiPayload = serde_json::from_str(raw).unwrap();
+
+        assert_eq!(payload.model.as_deref(), Some("gpt-5.5"));
+        assert_eq!(payload.effort.as_deref(), Some("medium"));
+        assert_eq!(payload.tier.as_deref(), Some("default"));
+        assert_eq!(payload.context_pct, Some(83));
+        assert_eq!(payload.used_tokens_k, Some(215));
+        assert_eq!(
+            payload.quota,
+            Some(Quota {
+                five_hour_left: Some(82),
+                weekly_left: Some(78)
+            })
+        );
+
+        let json = String::from_utf8(encode_payload(&payload).unwrap()).unwrap();
+        assert!(json.contains("\"effort\":\"medium\""));
+        assert!(json.contains("\"tier\":\"default\""));
     }
 
     #[test]
@@ -140,6 +183,8 @@ mod tests {
             time: "14:25".to_string(),
             event: "UserPromptSubmit".to_string(),
             model: None,
+            effort: None,
+            tier: None,
             session: None,
             prompt: None,
             context_pct: Some(101),
@@ -159,6 +204,8 @@ mod tests {
             time: "14:25".to_string(),
             event: "UserPromptSubmit".to_string(),
             model: None,
+            effort: None,
+            tier: None,
             session: None,
             prompt: Some("x".repeat(MAX_ENCODED_PAYLOAD_BYTES)),
             context_pct: None,

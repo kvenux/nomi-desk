@@ -42,11 +42,11 @@ Current device state:
   - BLE local name: `Nomi RLCD`
   - Status: migrated to Nomi v1 BLE identity and payload.
 - `firmware/xteink`
-  - Status: imported and build-verified, but **not yet migrated** to Nomi v1 BLE identity.
-  - Current old local name in code: `Codex XTEINK`.
-  - Treat protocol migration for XTEINK as a separate task.
+  - BLE local name: `Nomi XTEINK`.
+  - Status: migrated to Nomi v1 BLE identity and payload, with fast e-ink refresh after the first full refresh.
+  - Host button mapping is intentionally not enabled yet.
 
-Strictly speaking, `nomi-send` can directly target AMOLED and RLCD today. XTEINK is present for build integration and future migration.
+`nomi-send` can directly target AMOLED, RLCD, and XTEINK through the shared Nomi v1 BLE service.
 
 ## Main Host Path
 
@@ -88,7 +88,7 @@ cd ..\..
 Firmware builds on Windows should use a short PlatformIO core directory and UTF-8 Python output:
 
 ```powershell
-$env:PLATFORMIO_CORE_DIR=(Join-Path $env:LOCALAPPDATA 'nomi\pio-core')
+$env:PLATFORMIO_CORE_DIR='C:\pio'
 $env:PYTHONUTF8='1'
 $env:PYTHONIOENCODING='utf-8'
 chcp 65001
@@ -109,7 +109,7 @@ python -m platformio run
 
 ## Known Build Pitfalls
 
-### XTEINK Windows GBK Failure
+### XTEINK Windows GBK / MAX_PATH Failures
 
 Observed failure during `firmware/xteink` PlatformIO build:
 
@@ -122,6 +122,7 @@ Root cause: Windows default GBK console encoding cannot print some language name
 Fix:
 
 ```powershell
+$env:PLATFORMIO_CORE_DIR='C:\pio'
 $env:PYTHONUTF8='1'
 $env:PYTHONIOENCODING='utf-8'
 chcp 65001
@@ -129,6 +130,8 @@ python -m platformio run
 ```
 
 With those settings, XTEINK was build-verified successfully. The prior successful XTEINK build produced `firmware.bin`, `bootloader.bin`, and `partitions.bin` under `.pio/build/default/`.
+
+On Windows machines where `LongPathsEnabled=0`, a longer PlatformIO core directory can also fail while unpacking ESP32 Arduino packages with `FileNotFoundError` around long `connectedhomeip` paths. Use the short `C:\pio` core directory above instead of a deep user-profile path.
 
 ### PlatformIO Build Time
 
@@ -183,6 +186,6 @@ Fixed during review:
 
 Remaining non-blocking follow-up work:
 
-- Migrate `firmware/xteink` to Nomi v1 BLE identity and payload.
+- Add XTEINK host button mapping if/when the control UX is defined.
 - Add future Claude Code integration without making the core protocol Codex-specific.
 - Eventually consolidate `nomi-send` into a user-facing `nomi` CLI if packaging through npm.

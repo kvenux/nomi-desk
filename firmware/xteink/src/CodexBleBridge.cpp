@@ -6,10 +6,11 @@
 #include <BLEServer.h>
 #include <inttypes.h>
 
-static constexpr const char* CODEX_SERVICE_UUID = "6f30d210-2f6d-4a8c-9f78-42d8d2f04201";
-static constexpr const char* CODEX_STATE_UUID = "6f30d211-2f6d-4a8c-9f78-42d8d2f04201";
-static constexpr const char* CODEX_WRITE_UUID = "6f30d212-2f6d-4a8c-9f78-42d8d2f04201";
-static constexpr const char* CODEX_EVENT_UUID = "6f30d213-2f6d-4a8c-9f78-42d8d2f04201";
+static constexpr const char* NOMI_DEVICE_NAME = "Nomi XTEINK";
+static constexpr const char* NOMI_SERVICE_UUID = "f4f688c2-613e-56a5-b115-d19a99d1b463";
+static constexpr const char* NOMI_RX_UUID = "74879a99-7275-5b33-9665-51519f328fa5";
+static constexpr const char* NOMI_TX_UUID = "830ac719-8dea-541c-8d18-5e8de4cd83dd";
+static constexpr const char* NOMI_INFO_UUID = "485d9275-a3ad-516d-a524-e284f0aafdb1";
 
 static CodexBleBridge* activeBridge = nullptr;
 
@@ -40,8 +41,8 @@ void CodexBleBridge::begin(CodexStatus* status) {
   status_ = status;
   activeBridge = this;
 
-  if (!BLEDevice::init("Codex XTEINK")) {
-    Serial.println("CODEX BLE INIT FAILED");
+  if (!BLEDevice::init(NOMI_DEVICE_NAME)) {
+    Serial.println("NOMI XTEINK BLE INIT FAILED");
     return;
   }
   BLEDevice::setMTU(247);
@@ -49,22 +50,21 @@ void CodexBleBridge::begin(CodexStatus* status) {
   server_ = BLEDevice::createServer();
   server_->setCallbacks(&serverCallbacks);
 
-  BLEService* service = server_->createService(CODEX_SERVICE_UUID);
-  stateChar_ =
-      service->createCharacteristic(CODEX_STATE_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
-  writeChar_ = service->createCharacteristic(CODEX_WRITE_UUID,
+  BLEService* service = server_->createService(NOMI_SERVICE_UUID);
+  writeChar_ = service->createCharacteristic(NOMI_RX_UUID,
                                              BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
   eventChar_ =
-      service->createCharacteristic(CODEX_EVENT_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+      service->createCharacteristic(NOMI_TX_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+  infoChar_ = service->createCharacteristic(NOMI_INFO_UUID, BLECharacteristic::PROPERTY_READ);
 
   writeChar_->setCallbacks(&writeCallbacks);
-  stateChar_->setValue("ready");
-  eventChar_->setValue("{\"type\":\"boot\"}");
+  eventChar_->setValue("{\"xteink\":true}");
+  infoChar_->setValue("{\"protocol\":\"nomi-agent-display\",\"version\":1,\"device\":\"xteink\",\"width\":480,\"height\":800}");
   service->start();
 
   BLEAdvertising* advertising = BLEDevice::getAdvertising();
-  advertising->setName("Codex XTEINK");
-  advertising->addServiceUUID(CODEX_SERVICE_UUID);
+  advertising->setName(NOMI_DEVICE_NAME);
+  advertising->addServiceUUID(NOMI_SERVICE_UUID);
   advertising->setScanResponse(true);
   BLEDevice::startAdvertising();
 }
@@ -83,25 +83,17 @@ bool CodexBleBridge::poll() {
   if (ok) {
     ++acceptedCount_;
     char state[160];
-    snprintf(state, sizeof(state), "{\"type\":\"state\",\"rev\":%" PRIu32 ",\"accepted\":%" PRIu32 "}",
+    snprintf(state, sizeof(state), "{\"ack\":true,\"rev\":%" PRIu32 ",\"accepted\":%" PRIu32 "}",
              status_->revision, acceptedCount_);
-    if (stateChar_) stateChar_->setValue(state);
     notifyJson(state);
   } else {
     ++rejectedCount_;
     char err[160];
-    snprintf(err, sizeof(err), "{\"type\":\"error\",\"message\":\"%s\",\"rejected\":%" PRIu32 "}", result,
+    snprintf(err, sizeof(err), "{\"err\":true,\"message\":\"%s\",\"rejected\":%" PRIu32 "}", result,
              rejectedCount_);
     notifyJson(err);
   }
   return ok;
-}
-
-void CodexBleBridge::notifyButton(const char* button, uint8_t page, uint8_t theme) {
-  char event[160];
-  snprintf(event, sizeof(event), "{\"type\":\"button\",\"button\":\"%s\",\"page\":%u,\"theme\":%u}", button, page,
-           theme);
-  notifyJson(event);
 }
 
 void CodexBleBridge::onConnect() {

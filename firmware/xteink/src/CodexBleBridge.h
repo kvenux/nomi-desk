@@ -16,7 +16,6 @@ class CodexBleBridge {
   bool isConnected() const { return connected_; }
   uint32_t acceptedCount() const { return acceptedCount_; }
   uint32_t rejectedCount() const { return rejectedCount_; }
-  void notifyButton(const char* button, uint8_t page, uint8_t theme);
 
  private:
   friend class CodexBridgeServerCallbacks;
@@ -29,7 +28,7 @@ class CodexBleBridge {
 
   CodexStatus* status_ = nullptr;
   BLEServer* server_ = nullptr;
-  BLECharacteristic* stateChar_ = nullptr;
+  BLECharacteristic* infoChar_ = nullptr;
   BLECharacteristic* writeChar_ = nullptr;
   BLECharacteristic* eventChar_ = nullptr;
   volatile bool connected_ = false;

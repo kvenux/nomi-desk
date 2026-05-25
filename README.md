@@ -24,7 +24,7 @@ docs/
 
 - `firmware/amoled`: migrated to Nomi v1 BLE names and UUIDs.
 - `firmware/rlcd`: migrated to Nomi v1 BLE names and UUIDs.
-- `firmware/xteink`: imported into the project and kept build-isolated; Nomi v1 protocol migration is still a separate step.
+- `firmware/xteink`: migrated to Nomi v1 BLE names and UUIDs, with e-ink fast-refresh updates after the initial full refresh. Host button mapping is not enabled yet.
 
 ## Hook-Only Codex Path
 
@@ -45,19 +45,21 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\integrations\codex\install
 Then open Codex and run `/hooks` once to trust the installed hook commands.
 
 The hook finds `nomi-send` in this order: `NOMI_SEND_PATH`, this repository's Rust build output, then `nomi-send` on `PATH`. Hook diagnostics are written to `%TEMP%\nomi\hook.log`.
+It also reads `%USERPROFILE%\.codex\config.toml` and recent session JSONL files so displays can show model effort, context usage, token count, and quota remaining; set `CODEX_HOME` to override that lookup.
 
 ## Firmware Build
 
 Use a short PlatformIO core directory and UTF-8 Python output on Windows:
 
 ```powershell
-$env:PLATFORMIO_CORE_DIR=(Join-Path $env:LOCALAPPDATA 'nomi\pio-core')
+$env:PLATFORMIO_CORE_DIR='C:\pio'
 $env:PYTHONUTF8='1'
 $env:PYTHONIOENCODING='utf-8'
 chcp 65001
 ```
 
 The UTF-8 settings are required for `firmware/xteink` on Windows because its i18n generator can print language names that the default GBK console cannot encode.
+The short `C:\pio` core directory also avoids Windows MAX_PATH failures while PlatformIO unpacks the ESP32 Arduino packages when long path support is disabled.
 
 Build firmware:
 

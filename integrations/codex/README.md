@@ -38,12 +38,14 @@ The hook always returns:
 
 BLE scan/connect/write happens outside the blocking Codex hook path. If no Nomi device is nearby, Codex continues normally and `nomi-send` records the failure in its local state log.
 
+The payload includes model, reasoning effort, and service tier from `config.toml`, plus the latest `token_count` snapshot from Codex session JSONL when available. That snapshot drives context percentage, used tokens, and 5-hour/weekly quota remaining. Set `CODEX_HOME` to override the default `%USERPROFILE%\.codex` lookup.
+
 ## Nomi v1 BLE Identity
 
 ```text
 AMOLED local name: Nomi AMOLED
 RLCD local name:   Nomi RLCD
-XTEINK local name: pending migration
+XTEINK local name: Nomi XTEINK
 
 Service UUID:      f4f688c2-613e-56a5-b115-d19a99d1b463
 RX/write UUID:     74879a99-7275-5b33-9665-51519f328fa5
@@ -51,4 +53,4 @@ TX/notify UUID:    830ac719-8dea-541c-8d18-5e8de4cd83dd
 Info/read UUID:    485d9275-a3ad-516d-a524-e284f0aafdb1
 ```
 
-`firmware/xteink` is imported and build-isolated, but its protocol migration is intentionally separate from the repository-layout cleanup.
+`firmware/xteink` accepts the shared display payload and refreshes the e-ink screen on status updates. XTEINK host button mapping is intentionally not enabled yet.

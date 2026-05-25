@@ -2,6 +2,10 @@
 
 #include <ArduinoJson.h>
 #include <ctype.h>
+#include <string.h>
+
+static constexpr const char* NOMI_PROTOCOL = "nomi-agent-display";
+static constexpr int NOMI_VERSION = 1;
 
 static uint8_t clampPct(int value) {
   if (value < 0) return 0;
@@ -24,6 +28,36 @@ static bool assignString(JsonVariantConst v, char* dst, size_t dstLen) {
 static bool assignString(JsonObjectConst obj, const char* key, char* dst, size_t dstLen) {
   if (!obj[key].is<const char*>()) return false;
   copyText(dst, dstLen, obj[key].as<const char*>());
+  return true;
+}
+
+static void appendTextPart(char* dst, size_t dstLen, const char* part) {
+  if (!dst || dstLen == 0 || !part || part[0] == '\0') return;
+
+  size_t used = strlen(dst);
+  if (used >= dstLen - 1) return;
+
+  if (used > 0) {
+    dst[used++] = ' ';
+    dst[used] = '\0';
+  }
+
+  if (used < dstLen) {
+    strlcpy(dst + used, part, dstLen - used);
+  }
+}
+
+static bool ApplyNomiModelLine(JsonObjectConst obj, char* dst, size_t dstLen) {
+  const bool hasModel = obj["model"].is<const char*>();
+  const bool hasEffort = obj["effort"].is<const char*>();
+  const bool hasTier = obj["tier"].is<const char*>();
+  if (!hasModel && !hasEffort && !hasTier) return false;
+
+  char line[48] = "";
+  appendTextPart(line, sizeof(line), hasModel ? obj["model"].as<const char*>() : dst);
+  if (hasEffort) appendTextPart(line, sizeof(line), obj["effort"].as<const char*>());
+  if (hasTier) appendTextPart(line, sizeof(line), obj["tier"].as<const char*>());
+  copyText(dst, dstLen, line);
   return true;
 }
 
@@ -51,18 +85,18 @@ static bool assignPctFromString(JsonObjectConst obj, const char* key, uint8_t& o
 }
 
 void CodexStatus::setDefaults() {
-  copyText(modelLine, sizeof(modelLine), "gpt-5.5 high fast");
-  copyText(project, sizeof(project), "MatrixSpec");
-  copyText(branch, sizeof(branch), "main");
-  copyText(runState, sizeof(runState), "Ready");
-  copyText(contextLine, sizeof(contextLine), "79% used");
-  copyText(tokenLine, sizeof(tokenLine), "1.46M total used");
-  copyText(goalLine, sizeof(goalLine), "Goal achieved (53m)");
-  contextPct = 79;
-  fiveHourPct = 97;
-  weeklyPct = 93;
-  tasksDone = 4;
-  tasksTotal = 4;
+  copyText(modelLine, sizeof(modelLine), "waiting for Nomi");
+  copyText(project, sizeof(project), "codex");
+  copyText(branch, sizeof(branch), "current session");
+  copyText(runState, sizeof(runState), "offline");
+  copyText(contextLine, sizeof(contextLine), "0% used");
+  copyText(tokenLine, sizeof(tokenLine), "0K tokens used");
+  copyText(goalLine, sizeof(goalLine), "waiting for payload");
+  contextPct = 0;
+  fiveHourPct = 0;
+  weeklyPct = 0;
+  tasksDone = 0;
+  tasksTotal = 0;
   revision = 0;
   updatedAtMs = millis();
 }
@@ -79,6 +113,39 @@ bool CodexStatus::applyJson(const char* payload, char* errorOut, size_t errorLen
   if (obj.isNull()) {
     if (errorOut && errorLen) copyText(errorOut, errorLen, "json:object required");
     return false;
+  }
+
+  if (obj["protocol"].is<const char*>()) {
+    const char* protocol = obj["protocol"].as<const char*>();
+    if (strcmp(protocol, NOMI_PROTOCOL) != 0) {
+      if (errorOut && errorLen) snprintf(errorOut, errorLen, "protocol:%s", protocol);
+      return false;
+    }
+    if (!obj["version"].is<int>() || obj["version"].as<int>() != NOMI_VERSION) {
+      if (errorOut && errorLen) snprintf(errorOut, errorLen, "version:%d", obj["version"] | -1);
+      return false;
+    }
+  }
+
+  assignString(obj, "source", project, sizeof(project));
+  assignString(obj, "session", branch, sizeof(branch));
+  assignString(obj, "state", runState, sizeof(runState));
+  ApplyNomiModelLine(obj, modelLine, sizeof(modelLine));
+  assignString(obj, "event", goalLine, sizeof(goalLine));
+  assignString(obj, "prompt", goalLine, sizeof(goalLine));
+
+  if (obj["context_pct"].is<int>()) {
+    contextPct = clampPct(obj["context_pct"].as<int>());
+    snprintf(contextLine, sizeof(contextLine), "%u%% used", static_cast<unsigned>(contextPct));
+  }
+  if (obj["used_tokens_k"].is<int>()) {
+    const int tokens = max(0, obj["used_tokens_k"].as<int>());
+    snprintf(tokenLine, sizeof(tokenLine), "%dK tokens used", tokens);
+  }
+  JsonObjectConst quota = obj["quota"].as<JsonObjectConst>();
+  if (!quota.isNull()) {
+    if (quota["five_hour_left"].is<int>()) fiveHourPct = clampPct(quota["five_hour_left"].as<int>());
+    if (quota["weekly_left"].is<int>()) weeklyPct = clampPct(quota["weekly_left"].as<int>());
   }
 
   assignString(obj, "model_line", modelLine, sizeof(modelLine));
@@ -154,7 +221,7 @@ bool CodexStatus::applyJson(const char* payload, char* errorOut, size_t errorLen
 }
 
 void CodexStatus::metaLine(char* out, size_t outLen) const {
-  snprintf(out, outLen, "%s · %s · %s", project, branch, runState);
+  snprintf(out, outLen, "%s / %s / %s", project, branch, runState);
 }
 
 void CodexStatus::tasksLine(char* out, size_t outLen) const {
