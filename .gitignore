@@ -1,0 +1,12 @@
+firmware/**/.pio/
+firmware/**/.cache/
+tools/nomi-send/target/
+
+*.out
+*.err
+*.log
+__pycache__/
+*.pyc
+
+.codex/
+.pio-core/

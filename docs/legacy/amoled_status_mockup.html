@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Codex AMOLED Status Mockup</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #050607;
+      --panel: #0b0f12;
+      --line: #223039;
+      --muted: #78909c;
+      --text: #f4f7f8;
+      --green: #00f0a8;
+      --cyan: #37c7ff;
+      --pink: #ff7ad9;
+      --amber: #ffcc66;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #171b1f;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    }
+
+    .device {
+      width: 560px;
+      height: 560px;
+      padding: 38px;
+      border-radius: 56px;
+      background: #f3f0e8;
+      position: relative;
+      box-shadow: 0 28px 80px rgba(0,0,0,.45), inset 0 0 0 2px rgba(255,255,255,.35);
+    }
+
+    .screen {
+      width: 484px;
+      height: 484px;
+      border-radius: 30px;
+      background:
+        radial-gradient(circle at 72% 18%, rgba(55,199,255,.12), transparent 28%),
+        linear-gradient(180deg, #07090a, #030404);
+      box-shadow: inset 0 0 0 2px #1d252b, inset 0 0 32px rgba(0,240,168,.05);
+      color: var(--text);
+      padding: 22px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .screen::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 30px;
+      padding: 2px;
+      background: linear-gradient(135deg, rgba(0,240,168,.28), rgba(55,199,255,.18), rgba(255,122,217,.16));
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+    }
+
+    @property --angle {
+      syntax: "<angle>";
+      inherits: false;
+      initial-value: 0deg;
+    }
+
+    @keyframes spin { to { --angle: 360deg; } }
+
+    .top {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(55,199,255,.18);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      background: var(--green);
+      box-shadow: 0 0 18px var(--green);
+    }
+
+    .logo {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      color: #f4d4ff;
+      text-shadow: 0 0 12px rgba(255,122,217,.45);
+    }
+
+    .top-right {
+      display: flex;
+      gap: 7px;
+      align-items: center;
+    }
+
+    .chip {
+      font-size: 14px;
+      color: #d7e6ea;
+      border: 1px solid var(--line);
+      padding: 5px 8px;
+      background: rgba(255,255,255,.028);
+      box-shadow: inset 0 0 12px rgba(55,199,255,.04);
+    }
+
+    .chip.ble {
+      color: var(--green);
+      border-color: rgba(0,240,168,.34);
+      text-shadow: 0 0 10px rgba(0,240,168,.45);
+    }
+
+    .prompt {
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(18,28,34,.88), rgba(7,12,15,.86));
+      padding: 10px 12px;
+      margin-bottom: 18px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.015);
+    }
+
+    .prompt::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      padding: 2px;
+      background:
+        conic-gradient(from var(--angle), transparent 0deg, transparent 36deg, #00f0a8 64deg, #37c7ff 96deg, #ff7ad9 128deg, transparent 160deg, transparent 360deg);
+      animation: spin 2.4s linear infinite;
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+    }
+
+    .screen.working .prompt {
+      border-color: rgba(0,240,168,.42);
+      box-shadow:
+        0 0 16px rgba(0,240,168,.28),
+        0 0 34px rgba(55,199,255,.18),
+        inset 0 0 22px rgba(0,240,168,.06);
+    }
+
+    .screen.working .prompt::before {
+      background: conic-gradient(from var(--angle), #00f0a8, #37c7ff, #ff7ad9, #ffcc66, #00f0a8);
+      animation-duration: 1.8s;
+    }
+
+    .prompt-label {
+      color: var(--cyan);
+      font-size: 11px;
+      margin-bottom: 6px;
+      letter-spacing: 1px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .prompt-text {
+      font-family: "Microsoft YaHei UI", "Noto Sans CJK SC", sans-serif;
+      font-size: 16px;
+      line-height: 1.35;
+      color: #e9f0f2;
+      height: 44px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      position: relative;
+      z-index: 1;
+    }
+
+    .status {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      align-items: center;
+      gap: 16px;
+      margin: 10px 0 18px;
+      padding: 14px 16px;
+      border: 1px solid rgba(0,240,168,.28);
+      background: linear-gradient(90deg, rgba(0,240,168,.075), rgba(55,199,255,.03));
+      box-shadow: inset 0 0 20px rgba(0,240,168,.035);
+    }
+
+    .state {
+      font-size: 28px;
+      line-height: 1;
+      font-weight: 900;
+      color: var(--green);
+      text-shadow: 0 0 18px rgba(0,240,168,.55);
+    }
+
+    .model {
+      font-size: 17px;
+      color: #f2c9ec;
+      text-align: right;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.15fr .85fr .85fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .card {
+      border: 1px solid rgba(55,199,255,.22);
+      background: linear-gradient(180deg, rgba(12,18,22,.92), rgba(5,8,10,.88));
+      padding: 12px;
+      min-height: 94px;
+      box-shadow: inset 0 0 16px rgba(55,199,255,.035);
+    }
+
+    .label {
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 7px;
+    }
+
+    .value {
+      font-size: 30px;
+      font-weight: 800;
+      color: var(--text);
+      margin-bottom: 9px;
+    }
+
+    .small {
+      font-size: 13px;
+      color: #f2c9ec;
+    }
+
+    .bar {
+      height: 8px;
+      border: 1px solid #2b3d46;
+      background: #071013;
+      overflow: hidden;
+    }
+
+    .fill-green { height: 100%; background: var(--green); box-shadow: 0 0 12px var(--green); }
+    .fill-cyan { height: 100%; background: var(--cyan); box-shadow: 0 0 12px var(--cyan); }
+
+    .footer {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      border-top: 1px solid rgba(55,199,255,.18);
+      padding-top: 12px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .keys {
+      display: flex;
+      gap: 7px;
+    }
+
+    .key {
+      border: 1px solid var(--line);
+      padding: 5px 7px;
+      color: #d8e3e7;
+    }
+  </style>
+</head>
+<body>
+  <div class="device">
+    <main class="screen working">
+      <section class="top">
+        <div class="brand">
+          <div class="dot"></div>
+          <div class="logo">CODEX</div>
+        </div>
+        <div class="top-right">
+          <div class="chip">22:48</div>
+          <div class="chip ble">BLE LINK</div>
+        </div>
+      </section>
+
+      <section class="prompt">
+        <div class="prompt-label">RUNNING PROMPT</div>
+        <div class="prompt-text">优化小屏幕状态仪表盘：显示最近正在执行的任务提示词，ACTIVE 时用 RGB 跑马灯边框突出当前工作状态。</div>
+      </section>
+
+      <section class="status">
+        <div class="state">WORKING</div>
+        <div class="model">gpt-5.5 / medium / fast</div>
+      </section>
+
+      <section class="grid">
+        <div class="card">
+          <div class="label">CONTEXT</div>
+          <div class="value">55%</div>
+          <div class="small">142K USED</div>
+          <div class="bar" style="margin-top: 9px"><div class="fill-green" style="width: 55%"></div></div>
+        </div>
+        <div class="card">
+          <div class="label">5H</div>
+          <div class="value">98%</div>
+          <div class="bar"><div class="fill-green" style="width: 98%"></div></div>
+        </div>
+        <div class="card">
+          <div class="label">WEEKLY</div>
+          <div class="value">99%</div>
+          <div class="bar"><div class="fill-cyan" style="width: 99%"></div></div>
+        </div>
+      </section>
+
+      <section class="footer">
+        <div>EVENT: UserPromptSubmit</div>
+        <div class="keys">
+          <span class="key">MIC</span>
+          <span class="key">DEL</span>
+          <span class="key">ENTER</span>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
